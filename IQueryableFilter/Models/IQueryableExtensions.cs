@@ -42,24 +42,74 @@ namespace IQueryableFilter
       }
 
       /// <summary>
-      /// 
+      /// builds an expression for the where clause. default values of each property 
+      /// are neglected like this : T.property == Defaul(property) || T.property == filter.property
       /// </summary>
       /// <typeparam name="T"></typeparam>
       /// <param name="filter"></param>
       /// <returns></returns>
-      private static Expression<Func<T, bool>> BuildWhereClaseKeepNullValuedProperties<T>(T filter)
+      private static Expression<Func<T, bool>> BuildWhereClaseKeepNullValuedProperties<T>(T Filter)
       {
-         throw new NotImplementedException();
+         throw new NotImplementedException("Implementation to be finished");
+         if (Filter == null)
+         {
+            throw new ArgumentNullException("Filter");
+         }
+         // get the properties of T 
+         var type = typeof(T);
+         // get simple properties, discard complex types and navigation properties
+         var properties = type.GetProperties().Where(p => IsSimple(p)).ToList();
+
+         List<Expression> leftTerms = new List<Expression>();
+         List<Expression> rightTerms = new List<Expression>();
+
+         var parameter = Expression.Parameter(typeof(T));
+
+         // construct the condition terms : (T.property == filter.property)
+         foreach (var p in properties)
+         {
+            Expression left = Expression.PropertyOrField(parameter, p.Name);
+            Expression right = Expression.Constant(p.GetValue(Filter));
+
+            // this is necessary for nullable value so that comparaison operators work correctly
+            if (!IsNullableValueType(right.Type) && IsNullableValueType(left.Type))
+            {
+               right = Expression.Convert(right, p.PropertyType);
+            }
+            else if (((ConstantExpression)right).Value == null)
+            {
+               right = Expression.Convert(right, p.PropertyType);
+            }
+
+
+            leftTerms.Add(left);
+            rightTerms.Add(right);
+         }
+         Expression whereClause = Expression.Constant(true); // default filter 
+         if (properties.Count > 0)
+         {
+            whereClause = Expression.Equal(leftTerms[0], rightTerms[0]);
+         }
+         for (int i = 1; i < properties.Count; i++)
+         {
+            whereClause = Expression.And(whereClause, Expression.Equal(leftTerms[i], rightTerms[i]));
+         }
+
+         return Expression.Lambda<Func<T, bool>>(whereClause, parameter);
       }
 
       /// <summary>
-      /// builds an expression for the where clause using the filter 
+      /// builds an expression for the where clause using the filter. 
       /// </summary>
       /// <typeparam name="T"></typeparam>
       /// <param name="Filter"></param>
       /// <returns></returns>
       private static Expression<Func<T, bool>> BuildWhereClaseDiscardNullValuedProperties<T>(T Filter)
       {
+         if (Filter == null)
+         {
+            throw new ArgumentNullException("Filter");
+         }
          // get the properties of T 
          var type = typeof(T);
          // get simple properties, discard complex types and navigation properties
