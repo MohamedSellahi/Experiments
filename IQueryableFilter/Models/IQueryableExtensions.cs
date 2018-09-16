@@ -17,11 +17,12 @@ namespace IQueryableFilter
       /// <typeparam name="T">the type of the entity in the <paramref name="collection"/></typeparam>
       /// <param name="collection">the collection of items to be filtered</param>
       /// <param name="filter">the filter to apply on the collection</param>
+      /// <param name="DisCardNullArguments">specifies if the filtering should ignore unspecified properties of the filter</param>
       /// <returns></returns>
-      public static IQueryable<T> FilterBy<T>(this IQueryable<T> collection, T filter)
+      public static IQueryable<T> FilterBy<T>(this IQueryable<T> collection, T filter, bool DisCardNullArguments = true)
       {
                   // build the where clause 
-         Expression<Func<T, bool>> whereClause = BuildWhereClause(filter, true);
+         Expression<Func<T, bool>> whereClause = BuildWhereClause(filter, DisCardNullArguments);
          return whereClause == null ? collection : collection.Where(whereClause); 
       }
 
@@ -33,7 +34,7 @@ namespace IQueryableFilter
       /// <param name="DisCardNullArguments">if true, properties with null values are discarded in 
       /// the where the generated where clause</param>
       /// <returns></returns>
-      private static Expression<Func<T, bool>> BuildWhereClause<T>(T filter, bool DisCardNullArguments = true)
+      public static Expression<Func<T, bool>> BuildWhereClause<T>(T filter, bool DisCardNullArguments = true)
       {
 
          return DisCardNullArguments ?
@@ -48,9 +49,8 @@ namespace IQueryableFilter
       /// <typeparam name="T"></typeparam>
       /// <param name="filter"></param>
       /// <returns></returns>
-      private static Expression<Func<T, bool>> BuildWhereClaseKeepNullValuedProperties<T>(T Filter)
+      public static Expression<Func<T, bool>> BuildWhereClaseDiscardNullValuedProperties<T>(T Filter)
       {
-         throw new NotImplementedException("Implementation to be finished");
          if (Filter == null)
          {
             throw new ArgumentNullException("Filter");
@@ -59,6 +59,60 @@ namespace IQueryableFilter
          var type = typeof(T);
          // get simple properties, discard complex types and navigation properties
          var properties = type.GetProperties().Where(p => IsSimple(p)).ToList();
+         if (properties.Count == 0)
+         {
+            throw new ArgumentException("The passed type does not have any properties. Can't define a filter expression");
+         }
+
+         List<Expression> leftTerms = new List<Expression>();
+         List<Expression> rightTerms = new List<Expression>();
+
+         var parameter = Expression.Parameter(typeof(T));
+
+         // construct the condition terms : (T.property == filter.property || T.property == Default(p))
+         foreach (var p in properties)
+         {
+            Expression leftEqual = Expression.PropertyOrField(parameter, p.Name);
+            Expression rightEqual = Expression.Constant(p.GetValue(Filter));
+            Expression LeftOr = GetEqualsWithValue(leftEqual, rightEqual,p);
+            Expression RigthOr = GetEqualsWithDefault(leftEqual, p);
+
+            leftTerms.Add(LeftOr);
+            rightTerms.Add(RigthOr);
+         }
+         Expression whereClause = Expression.Constant(true); // default filter 
+         if (properties.Count > 0)
+         {
+            whereClause = Expression.Or(leftTerms[0], rightTerms[0]);
+         }
+         for (int i = 1; i < properties.Count; i++)
+         {
+            whereClause = Expression.And(whereClause, Expression.Or(leftTerms[i], rightTerms[i]));
+         }
+
+         return Expression.Lambda<Func<T, bool>>(whereClause, parameter);
+      }
+
+      /// <summary>
+      /// builds an expression for the where clause using the filter. 
+      /// </summary>
+      /// <typeparam name="T"></typeparam>
+      /// <param name="Filter"></param>
+      /// <returns></returns>
+      public static Expression<Func<T, bool>> BuildWhereClaseKeepNullValuedProperties<T>(T Filter)
+      {
+         if (Filter == null)
+         {
+            throw new ArgumentNullException("Filter");
+         }
+         // get the properties of T 
+         var type = typeof(T);
+         // get simple properties, discard complex types and navigation properties
+         var properties = type.GetProperties().Where(p => IsSimple(p)).ToList();
+         if (properties.Count == 0)
+         {
+            throw new ArgumentException("The passed type does not have any properties. Can't define a filter expression");
+         }
 
          List<Expression> leftTerms = new List<Expression>();
          List<Expression> rightTerms = new List<Expression>();
@@ -99,58 +153,36 @@ namespace IQueryableFilter
       }
 
       /// <summary>
-      /// builds an expression for the where clause using the filter. 
+      /// returns a term representing equality with default value of the property type 
       /// </summary>
-      /// <typeparam name="T"></typeparam>
-      /// <param name="Filter"></param>
+      /// <param name="left"></param>
+      /// <param name="right"></param>
+      /// <param name="p"></param>
       /// <returns></returns>
-      private static Expression<Func<T, bool>> BuildWhereClaseDiscardNullValuedProperties<T>(T Filter)
+      public static Expression GetEqualsWithDefault(Expression left, PropertyInfo p)
       {
-         if (Filter == null)
+         return Expression.Equal(left, Expression.Constant(GetDefaultValue(p.PropertyType)));
+      }
+
+      /// <summary>
+      /// gets the and term like this : T.property == filter.property
+      /// </summary>
+      /// <param name="left"></param>
+      /// <param name="right"></param>
+      /// <returns></returns>
+      public static Expression GetEqualsWithValue(Expression left, Expression right, PropertyInfo p)
+      {
+         // this is necessary for nullable value so that comparaison operators work correctly
+         if (!IsNullableValueType(right.Type) && IsNullableValueType(left.Type))
          {
-            throw new ArgumentNullException("Filter");
+            right = Expression.Convert(right, p.PropertyType);
          }
-         // get the properties of T 
-         var type = typeof(T);
-         // get simple properties, discard complex types and navigation properties
-         var properties = type.GetProperties().Where(p => IsSimple(p)).ToList();
-
-         List<Expression> leftTerms = new List<Expression>();
-         List<Expression> rightTerms = new List<Expression>();
-
-         var parameter = Expression.Parameter(typeof(T));
-
-         // construct the condition terms : (T.property == filter.property)
-         foreach (var p in properties)
+         else if (((ConstantExpression)right).Value == null)
          {
-            Expression left = Expression.PropertyOrField(parameter, p.Name);
-            Expression right = Expression.Constant(p.GetValue(Filter));
-
-            // this is necessary for nullable value so that comparaison operators work correctly
-            if (!IsNullableValueType(right.Type) && IsNullableValueType(left.Type))
-            {
-               right = Expression.Convert(right, p.PropertyType); 
-            }
-            else if (((ConstantExpression)right).Value == null)
-            {
-               right = Expression.Convert(right, p.PropertyType);
-            }
-
-
-            leftTerms.Add(left);
-            rightTerms.Add(right); 
-         }
-         Expression whereClause = Expression.Constant(true); // default filter 
-         if (properties.Count > 0)
-         {
-            whereClause = Expression.Equal(leftTerms[0], rightTerms[0]); 
-         }
-         for (int i = 1; i < properties.Count; i++)
-         {
-            whereClause = Expression.And(whereClause, Expression.Equal(leftTerms[i], rightTerms[i]));
+            right = Expression.Convert(right, p.PropertyType);
          }
 
-         return Expression.Lambda<Func<T, bool>>(whereClause, parameter); 
+         return Expression.Equal(left, right); 
       }
 
       /// <summary>
@@ -158,7 +190,7 @@ namespace IQueryableFilter
       /// </summary>
       /// <param name="p"></param>
       /// <returns></returns>
-      private static bool IsSimple(PropertyInfo p)
+      public static bool IsSimple(PropertyInfo p)
       {
          var propertyType = p.PropertyType;
          return propertyType.IsPrimitive
@@ -177,7 +209,25 @@ namespace IQueryableFilter
          return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>);
       }
 
+      /// <summary>
+      /// Gets the default value for a type 
+      /// </summary>
+      /// <param name="type"></param>
+      /// <returns></returns>
+      static object GetDefaultValue(Type type)
+      {
+         return type.IsValueType ? Activator.CreateInstance(type): null;
+      }
 
+      /// <summary>
+      /// gets the default value of a type
+      /// </summary>
+      /// <typeparam name="T"></typeparam>
+      /// <returns></returns>
+      public static T GetDefaultValue<T>()
+      {
+         return default(T);
+      }
       //test 
       public static void PrintProperties(Type type)
       {

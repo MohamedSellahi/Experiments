@@ -15,16 +15,16 @@ namespace IQueryableFilter
 
          using (var db = new DefaultContext())
          {
-            var person = db.Person.FirstOrDefault();
-            var people = db.Person.Where(p=>p.Demographics == "<IndividualSurvey xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/IndividualSurvey\"><TotalPurchaseYTD>0</TotalPurchaseYTD></IndividualSurvey>");
+            //var person = db.Person.FirstOrDefault();
+            //var people = db.Person.Where(p=>p.Demographics == "<IndividualSurvey xmlns=\"http://schemas.microsoft.com/sqlserver/2004/07/adventure-works/IndividualSurvey\"><TotalPurchaseYTD>0</TotalPurchaseYTD></IndividualSurvey>");
 
-            //var query1 = db.Person.FilterBy(person);
-            //var people = query1.ToList();
+            ////var query1 = db.Person.FilterBy(person);
+            ////var people = query1.ToList();
 
-            foreach (var p in people)
-            {
-               Console.WriteLine("FName: {0} --------> LName: {1}", p.FirstName, p.LastName);
-            }
+            //foreach (var p in people)
+            //{
+            //   Console.WriteLine("FName: {0} --------> LName: {1}", p.FirstName, p.LastName);
+            //}
 
             var address = db.Address.FirstOrDefault();
             Console.WriteLine("Address: {0} --> {1}", address.AddressLine1, address.City);
@@ -36,7 +36,7 @@ namespace IQueryableFilter
             }
             Console.WriteLine("------------------");
             Console.WriteLine("Filtered : ");
-            var query = db.Address.FilterBy(address);
+            var query = db.Address.FilterBy(address, true);
             var ad = query.ToList();
 
             foreach (var item in ad)
