@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -10,12 +11,19 @@ namespace IQueryableFilter
    {
       static void Main(string[] args)
       {
-         // The code provided will print ‘Hello World’ to the console.
-         // Press Ctrl+F5 (or go to Debug > Start Without Debugging) to run your app.
-         Console.WriteLine("Hello World!");
-         Console.ReadKey();
+         IQueryable<int> collection = (new int[] { 1, 3, 4 }).AsQueryable();
 
-         // Go to http://aka.ms/dotnet-get-started-console to continue learning how to build a console app! 
+         using (var db = new DefaultContext())
+         {
+            var person = db.Person.FirstOrDefault();
+
+            var people = db.Person.FilterBy(person).ToList(); 
+
+            foreach (var p in people)
+            {
+               Console.WriteLine("FName: {0} --------> LName: {1}", p.FirstName, p.LastName);
+            }
+         }
       }
    }
 }
