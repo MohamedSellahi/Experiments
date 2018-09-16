@@ -75,7 +75,7 @@
     <Compile Include="Models\EmployeePayHistory.cs" />
     <Compile Include="Models\ErrorLog.cs" />
     <Compile Include="Models\Illustration.cs" />
-    <Compile Include="Models\IQueryableExtensions.cs" />
+    <Compile Include="IQueryableExtensions.cs" />
     <Compile Include="Models\JobCandidate.cs" />
     <Compile Include="Models\Location.cs" />
     <Compile Include="Models\Password.cs" />
